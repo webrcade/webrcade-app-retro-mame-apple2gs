@@ -137,8 +137,8 @@ export class EmulatorPauseScreen extends Component {
           <EditorScreen
             onClose={closeCallback}
             tabs={[
-              { image: GamepadWhiteImage, label: Resources.getText(TEXT_IDS.GAMEPAD_CONTROLS), content: <GamepadControlsTab /> },
-              { image: KeyboardWhiteImage, label: Resources.getText(TEXT_IDS.KEYBOARD_CONTROLS), content: <KeyboardControlsTab /> },
+              { image: GamepadWhiteImage, label: Resources.getText(TEXT_IDS.GAMEPAD_CONTROLS), content: <GamepadControlsTab emulator={emulator} /> },
+              { image: KeyboardWhiteImage, label: Resources.getText(TEXT_IDS.KEYBOARD_CONTROLS), content: <KeyboardControlsTab emulator={emulator} /> },
             ]}
           />
         ) : null}

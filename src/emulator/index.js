@@ -9,6 +9,7 @@ import {
   CIDS,
   KeyCodeToControlMapping,
   blobToStr,
+  computeShortNames,
   md5,
   LOG,
 } from '@webrcade/app-common';
@@ -64,7 +65,7 @@ export class Emulator extends RetroAppWrapper {
     this.diskActivity = false;
     this.selectDown = false;
     this.analogMode = true;
-    this.keyboardJoystickMode = false;
+    this.keyboardJoystickMode = true;
     this.gameRunning = false;
 
     // Mouse delta accumulators (sent to C++ each frame, then cleared)
@@ -468,6 +469,63 @@ export class Emulator extends RetroAppWrapper {
     return await super.loadStateForSlot(slot);
   }
 
+  getMappings() {
+    return this.app.mappings || {};
+  }
+
+  initMaps() {
+    if (!this._initMaps) {
+      this._initMaps = true;
+
+      this.buttonBits = {
+        "a":     this.INP_A,
+        "b":     this.INP_B,
+        "x":     this.INP_X,
+        "y":     this.INP_Y,
+        "lb":    this.INP_LBUMP,
+        "rb":    this.INP_RBUMP,
+        "lt":    this.INP_LTRIG,
+        "rt":    this.INP_RTRIG,
+        "start": this.INP_START,
+      };
+
+      this.buttonIsDown = {};
+      for (const key in this.buttonBits) {
+        this.buttonIsDown[key] = [false, false, false, false];
+      }
+
+      this.keyActions = {
+        "return":      { code: 'Enter'        },
+        "space":       { code: 'Space'        },
+        "escape":      { code: 'Escape'       },
+        "tab":         { code: 'Tab'          },
+        "delete":      { code: 'Backspace'    },
+        "openapple":   { code: 'AltLeft'      },
+        "closedapple": { code: 'AltRight'     },
+        "minus":       { code: 'Minus'        },
+        "equal":       { code: 'Equal'        },
+        "lbracket":    { code: 'BracketLeft'  },
+        "rbracket":    { code: 'BracketRight' },
+        "backslash":   { code: 'Backslash'    },
+        "semicolon":   { code: 'Semicolon'    },
+        "quote":       { code: 'Quote'        },
+        "backtick":    { code: 'Backquote'    },
+        "comma":       { code: 'Comma'        },
+        "period":      { code: 'Period'       },
+        "slash":       { code: 'Slash'        },
+      };
+      for (let c = 0; c < 26; c++) {
+        const ch = (c + 10).toString(36);
+        this.keyActions[ch] = { code: 'Key' + ch.toUpperCase() };
+      }
+      for (let c = 0; c <= 9; c++) {
+        this.keyActions['' + c] = { code: 'Digit' + c };
+      }
+
+      this.mappings = this.getMappings();
+    }
+  }
+
   sendInput(controller, input, analog0x, analog0y, analog1x, analog1y) {
     if (controller === 0) {
       const DEADZONE = 0.15;
@@ -476,7 +534,29 @@ export class Emulator extends RetroAppWrapper {
       Math.max(-1, Math.min(1, dx * (4/3)));
       Math.max(-1, Math.min(1, dy * (4/3)));
     }
-    super.sendInput(controller, input, analog0x, analog0y, analog1x, analog1y);
+
+    this.initMaps();
+    let maskedInput = input;
+
+    for (const [btn, action] of Object.entries(this.mappings)) {
+      const bit = this.buttonBits[btn];
+      const keyDef = this.keyActions[action];
+      if (bit && keyDef) {
+        const isDown = !!(maskedInput & bit);
+        const wasDown = this.buttonIsDown[btn][controller];
+        if (isDown && !wasDown) {
+          if (keyDef.shift) this.sendKeyDown('ShiftLeft');
+          this.sendKeyDown(keyDef.code);
+        } else if (!isDown && wasDown) {
+          this.sendKeyUp(keyDef.code);
+          if (keyDef.shift) this.sendKeyUp('ShiftLeft');
+        }
+        this.buttonIsDown[btn][controller] = isDown;
+        maskedInput &= ~bit;
+      }
+    }
+
+    super.sendInput(controller, maskedInput, analog0x, analog0y, analog1x, analog1y);
   }
 
   async getFileContentMd5(content) {
@@ -651,27 +731,10 @@ export class Emulator extends RetroAppWrapper {
   }
 
   _computeShortNames(list) {
-    if (list.length < 2) return;
-    const compare = list[0].originalName;
-    let commonEnd = 0, startParen = -1, uniqueNameCount = 0;
-    for (commonEnd = 0; commonEnd < compare.length; commonEnd++) {
-      let stop = false;
-      for (let i = 1; i < list.length; i++) {
-        uniqueNameCount++;
-        const cur = list[i].originalName;
-        if (commonEnd >= cur.length - 1) { stop = true; break; }
-        if (cur[commonEnd] === '(') startParen = commonEnd;
-        else if (cur[commonEnd] === ')') startParen = -1;
-        if (cur[commonEnd] !== compare[commonEnd]) { stop = true; break; }
-      }
-      if (stop) break;
-    }
-    for (const curr of list) {
-      curr.shortName = curr.originalName.substring(
-        startParen !== -1 ? startParen : uniqueNameCount > 0 ? commonEnd : 0
-      );
-      const dot = curr.shortName.indexOf('.');
-      if (dot !== -1) curr.shortName = curr.shortName.substring(0, dot);
+    const shorts = computeShortNames(list.map(m => m.originalName));
+    for (let i = 0; i < list.length; i++) {
+      const dot = shorts[i].indexOf('.');
+      list[i].shortName = dot !== -1 ? shorts[i].substring(0, dot) : shorts[i];
     }
   }
 

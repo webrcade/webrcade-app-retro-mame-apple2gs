@@ -22,6 +22,15 @@ class App extends WebrcadeRetroApp {
   }
 
   createEmulator(app, isDebug) {
+    const { appProps } = this;
+    let mappings = appProps.mappings;
+    if (!mappings || Object.keys(mappings).length === 0) {
+      mappings = {
+        "a": "button0",
+        "b": "button1",
+      };
+    }
+    this.mappings = mappings;
     return new Emulator(app, isDebug);
   }
 
