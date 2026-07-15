@@ -2,15 +2,21 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-The Apple IIGS application for [webЯcade](https://www.webrcade.com) is an emulator for the [Apple IIGS computer](https://en.wikipedia.org/wiki/Apple_IIGS).
+The Apple IIGS application for [webЯcade](https://www.webrcade.com) is an emulator for the [Apple IIGS](https://en.wikipedia.org/wiki/Apple_IIGS) personal computer.
 
-The underlying emulator is a MAME-based core.
+The underlying emulator is the Libretro port of [MAME](https://github.com/libretro/mame).
 
-## Features
+<p align="center">
+ <a href="https://play.webrcade.com">
+  <img src="https://docs.webrcade.com/assets/images/apps/apple2gs.png" width="90%">
+ </a>
+ <br>
+ <i>Apple IIGS</i>
+</p>
 
-- Full Apple IIGS emulation via MAME
-- Save state support
-- Gamepad and keyboard controls
+## Documentation
+
+The [Apple IIGS Application Documentation](https://docs.webrcade.com/apps/emulators/apple2gs/) includes [keyboard](https://docs.webrcade.com/apps/emulators/apple2gs/#keyboard) and [gamepad](https://docs.webrcade.com/apps/emulators/apple2gs/#gamepad) control mappings, information related to [saving changes to game media](https://docs.webrcade.com/apps/emulators/apple2gs/#saving-changes-to-media), and details regarding the use of the emulator within a [webЯcade feed](https://docs.webrcade.com/apps/emulators/apple2gs/#feed).
 
 ## LICENSE
 
@@ -22,4 +28,4 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 ---
 
-The license presented above is limited to the Apple IIGS application for [webЯcade](https://www.webrcade.com). The underlying MAME project retains its own specific licensing.
+The license presented above is limited to the Apple IIGS application for [webЯcade](https://www.webrcade.com). The underlying [Libretro MAME](https://github.com/libretro/mame) project retains its own specific licensing.

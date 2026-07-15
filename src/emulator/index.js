@@ -225,6 +225,23 @@ export class Emulator extends RetroAppWrapper {
     return window.Module._wrc_rom_size || 0;
   }
   isEscapeHackEnabled() { return false; }
+
+  handleEscape(controllers) {
+    if (controllers.isControlDown(0, CIDS.LTRIG) && controllers.isControlDown(0, CIDS.RANALOG)) {
+      if (!this.gamepadVkPending) {
+        this.gamepadVkPending = true;
+        controllers
+          .waitUntilControlReleased(0, CIDS.ESCAPE)
+            .then(() => {
+              this.gamepadVkPending = false;
+              this.toggleKeyboard();
+            });
+      }
+      return true;
+    }
+    return false;
+  }
+
   isKeyboardEvent() { return this.keyboardEvent; }
   // Called by C++ to get ZipGS accelerator setting (0=default 2.8MHz, 1-4=7/8/12/16MHz)
   getCpuSpeed() { return this.getProps().cpuSpeed || 0; }

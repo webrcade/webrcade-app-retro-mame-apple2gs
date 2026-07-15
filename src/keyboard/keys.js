@@ -77,7 +77,7 @@ const onEnter = (kb, ctx, key) => {
 
 // Bottom row shared between pages — 1+1+1+1+2+1+1+2 = 10 units
 const bottomRowDefault = () => [
-  new KeyDef("123").setOnClick(showNumbers),
+  new KeyDef("123...").setOnClick(showNumbers),
   new KeyDef("Pos").setImage(SwapVertImage).setOnClick(locationToggle),
   new KeyDef("Shift").code("ShiftLeft").setOnClick(toggleShift).setIsEnabledCb(shiftEnabled),
   new KeyDef("Ctrl").code("ControlLeft").setOnClick(toggleCtrl).setIsEnabledCb(ctrlEnabled),
@@ -88,7 +88,7 @@ const bottomRowDefault = () => [
 ];
 
 const bottomRowNumbers = () => [
-  new KeyDef("abc").setOnClick(showLetters),
+  new KeyDef("abc...").setOnClick(showLetters),
   new KeyDef("Pos").setImage(SwapVertImage).setOnClick(locationToggle),
   new KeyDef("Shift").code("ShiftLeft").setOnClick(toggleShift).setIsEnabledCb(shiftEnabled),
   new KeyDef("Ctrl").code("ControlLeft").setOnClick(toggleCtrl).setIsEnabledCb(ctrlEnabled),

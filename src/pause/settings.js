@@ -64,8 +64,6 @@ export class Apple2GsSettingsEditor extends Component {
     const setFocusGridComps = (comps) => this.setState({ focusGridComps: comps });
     const setValues = (values) => this.setState({ values: values });
 
-    const enable2nd525 = emulator.getProps().enable2nd525 || false;
-    const enable2nd35 = emulator.getProps().enable2nd35 || false;
     const hasFlop1 = emulator.getFlop1List().length > 1;
     const hasFlop3 = emulator.getFlop3List().length > 1;
     const hasSession = hasFlop1 || hasFlop3;
