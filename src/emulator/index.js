@@ -544,6 +544,8 @@ export class Emulator extends RetroAppWrapper {
   }
 
   sendInput(controller, input, analog0x, analog0y, analog1x, analog1y) {
+    if (controller !== 0) return;
+
     if (controller === 0) {
       const DEADZONE = 0.15;
       const dx = (analog0x > -DEADZONE && analog0x < DEADZONE) ? 0 : analog0x;
@@ -555,8 +557,20 @@ export class Emulator extends RetroAppWrapper {
     this.initMaps();
     let maskedInput = input;
 
+    maskedInput &= ~(this.INP_A | this.INP_B);
+
     for (const [btn, action] of Object.entries(this.mappings)) {
       const bit = this.buttonBits[btn];
+
+      if (action === 'button0') {
+        if (bit && (input & bit)) maskedInput |= this.INP_A;
+        continue;
+      }
+      if (action === 'button1') {
+        if (bit && (input & bit)) maskedInput |= this.INP_B;
+        continue;
+      }
+
       const keyDef = this.keyActions[action];
       if (bit && keyDef) {
         const isDown = !!(maskedInput & bit);
