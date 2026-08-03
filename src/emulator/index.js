@@ -504,6 +504,17 @@ export class Emulator extends RetroAppWrapper {
         "lt":    this.INP_LTRIG,
         "rt":    this.INP_RTRIG,
         "start": this.INP_START,
+        "up":    this.INP_UP,
+        "down":  this.INP_DOWN,
+        "left":  this.INP_LEFT,
+        "right": this.INP_RIGHT,
+      };
+
+      this.moveBits = {
+        "moveup":    this.INP_UP,
+        "movedown":  this.INP_DOWN,
+        "moveleft":  this.INP_LEFT,
+        "moveright": this.INP_RIGHT,
       };
 
       this.buttonIsDown = {};
@@ -539,7 +550,13 @@ export class Emulator extends RetroAppWrapper {
         this.keyActions['' + c] = { code: 'Digit' + c };
       }
 
-      this.mappings = this.getMappings();
+      this.mappings = { ...this.getMappings() };
+      const DPAD_DEFAULTS = { up: 'moveup', down: 'movedown', left: 'moveleft', right: 'moveright' };
+      for (const [btn, defaultAction] of Object.entries(DPAD_DEFAULTS)) {
+        if (this.mappings[btn] === undefined) {
+          this.mappings[btn] = defaultAction;
+        }
+      }
     }
   }
 
@@ -557,23 +574,29 @@ export class Emulator extends RetroAppWrapper {
     this.initMaps();
     let maskedInput = input;
 
-    maskedInput &= ~(this.INP_A | this.INP_B);
+    maskedInput &= ~(this.INP_A | this.INP_B | this.INP_UP | this.INP_DOWN | this.INP_LEFT | this.INP_RIGHT);
 
     for (const [btn, action] of Object.entries(this.mappings)) {
       const bit = this.buttonBits[btn];
+      const isDown = !!(input & bit);
 
-      if (action === 'button0') {
-        if (bit && (input & bit)) maskedInput |= this.INP_A;
+      if (isDown && (action === 'button0')) {
+        maskedInput |= this.INP_A;
         continue;
       }
-      if (action === 'button1') {
-        if (bit && (input & bit)) maskedInput |= this.INP_B;
+      if (isDown && (action === 'button1')) {
+        maskedInput |= this.INP_B;
+        continue;
+      }
+
+      const moveBit = this.moveBits[action];
+      if (moveBit) {
+        if (isDown) maskedInput |= moveBit;
         continue;
       }
 
       const keyDef = this.keyActions[action];
       if (bit && keyDef) {
-        const isDown = !!(maskedInput & bit);
         const wasDown = this.buttonIsDown[btn][controller];
         if (isDown && !wasDown) {
           if (keyDef.shift) this.sendKeyDown('ShiftLeft');
@@ -925,10 +948,10 @@ export class Emulator extends RetroAppWrapper {
         window.addEventListener("mousemove", onMouse);
         document.onkeydown = (e) => {
           if (this.paused || this.app.isKeyboardShown()) return;
+          this.onKeyboardEvent(e);
           if (this.isKeyboardJoystickMode() &&
             this.controllers.getController(0).getKeyCodeToControllerMapping().getKeyCodeToControlId()[e.code] !== undefined)
             return;
-          this.onKeyboardEvent(e);
           if (e.repeat !== undefined && e.repeat) return;
           const retrok = this._browserCodeToRetrok(e.code);
           if (retrok) { window.Module._wrc_on_key(retrok, 1); e.stopPropagation(); e.preventDefault(); }
