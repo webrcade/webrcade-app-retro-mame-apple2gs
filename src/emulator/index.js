@@ -343,7 +343,11 @@ export class Emulator extends RetroAppWrapper {
     super.onPause(p);
   }
 
-  async applyGameSettings() {}
+  async applyGameSettings() {
+    if (this.getProps().initialKeyboardMode === 1) {
+      this.keyboardJoystickMode = false;
+    }
+  }
   createAudioProcessor() {
     return new ScriptAudioProcessor(
       2,
