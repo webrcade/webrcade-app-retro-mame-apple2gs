@@ -69,11 +69,16 @@ export class Apple2GsSettingsEditor extends Component {
     const hasSession = hasFlop1 || hasFlop3;
     const o = hasSession ? 1 : 0;
 
+    const flop12Collision = values.flop1Index !== -1 && values.flop1Index === values.flop2Index;
+    const flop34Collision = values.flop3Index !== -1 && values.flop3Index === values.flop4Index;
+    const driveCollision = flop12Collision || flop34Collision;
+
     return (
       <EditorScreen
         showCancel={true}
+        okDisabled={driveCollision}
         onOk={async () => {
-          if (this.busy) return;
+          if (this.busy || driveCollision) return;
           this.busy = true;
 
           let change = false;
@@ -216,26 +221,30 @@ class Apple2GsSessionSettingsTab extends FieldsTab {
     const enable2nd525 = emulator.getProps().enable2nd525 || false;
     const enable2nd35 = emulator.getProps().enable2nd35 || false;
 
-    // Build filtered lists with mutual exclusion and "(none)" option
-    const get525Options = (excludeIndex) => {
+    // Build stable option lists — same order/length regardless of the
+    // paired drive's current selection, so switching one drive never
+    // visually reshuffles the other's selector. Both drives in a pair may
+    // momentarily point at the same disk while the user is choosing;
+    // that's flagged below and blocked on OK rather than "resolved" by
+    // silently ejecting one.
+    const get525Options = () => {
       const opts = [{ value: -1, label: "(none)" }];
       for (let i = 0; i < flop1List.length; i++) {
-        if (i !== excludeIndex) {
-          opts.push({ value: i, label: (i + 1) + ": " + flop1List[i].shortName });
-        }
+        opts.push({ value: i, label: (i + 1) + ": " + flop1List[i].shortName });
       }
       return opts;
     };
 
-    const get35Options = (excludeIndex) => {
+    const get35Options = () => {
       const opts = [{ value: -1, label: "(none)" }];
       for (let i = 0; i < flop3List.length; i++) {
-        if (i !== excludeIndex) {
-          opts.push({ value: i, label: (i + 1) + ": " + flop3List[i].shortName });
-        }
+        opts.push({ value: i, label: (i + 1) + ": " + flop3List[i].shortName });
       }
       return opts;
     };
+
+    const flop12Collision = enable2nd525 && values.flop1Index !== -1 && values.flop1Index === values.flop2Index;
+    const flop34Collision = enable2nd35 && values.flop3Index !== -1 && values.flop3Index === values.flop4Index;
 
     return (
       <>
@@ -246,7 +255,7 @@ class Apple2GsSessionSettingsTab extends FieldsTab {
               <DiskSelect
                 selectRef={flop1Ref}
                 mediaList={flop1List}
-                customOptions={flop1List.length > 1 ? get525Options(values.flop2Index) : null}
+                customOptions={flop1List.length > 1 ? get525Options() : null}
                 onChange={(value) => setValues({ ...values, flop1Index: value })}
                 value={values.flop1Index}
                 onPad={e => focusGrid.moveFocus(e.type, flop1Ref)}
@@ -261,13 +270,18 @@ class Apple2GsSessionSettingsTab extends FieldsTab {
               <DiskSelect
                 selectRef={flop2Ref}
                 mediaList={flop1List}
-                customOptions={get525Options(values.flop1Index)}
+                customOptions={get525Options()}
                 onChange={(value) => setValues({ ...values, flop2Index: value })}
                 value={values.flop2Index}
                 onPad={e => focusGrid.moveFocus(e.type, flop2Ref)}
               />
             </FieldControl>
           </FieldRow>
+        )}
+        {flop12Collision && (
+          <div style={{ textAlign: 'center', fontSize: '1.1rem', color: '#ff6b6b', padding: '0.75rem 0' }}>
+            5.25&quot; Drive 1 and Drive 2 can't contain the same disk.
+          </div>
         )}
         {flop3List.length > 0 && (
           <FieldRow>
@@ -276,7 +290,7 @@ class Apple2GsSessionSettingsTab extends FieldsTab {
               <DiskSelect
                 selectRef={flop3Ref}
                 mediaList={flop3List}
-                customOptions={flop3List.length > 1 ? get35Options(values.flop4Index) : null}
+                customOptions={flop3List.length > 1 ? get35Options() : null}
                 onChange={(value) => setValues({ ...values, flop3Index: value })}
                 value={values.flop3Index}
                 onPad={e => focusGrid.moveFocus(e.type, flop3Ref)}
@@ -291,13 +305,18 @@ class Apple2GsSessionSettingsTab extends FieldsTab {
               <DiskSelect
                 selectRef={flop4Ref}
                 mediaList={flop3List}
-                customOptions={get35Options(values.flop3Index)}
+                customOptions={get35Options()}
                 onChange={(value) => setValues({ ...values, flop4Index: value })}
                 value={values.flop4Index}
                 onPad={e => focusGrid.moveFocus(e.type, flop4Ref)}
               />
             </FieldControl>
           </FieldRow>
+        )}
+        {flop34Collision && (
+          <div style={{ textAlign: 'center', fontSize: '1.1rem', color: '#ff6b6b', padding: '0.75rem 0' }}>
+            3.5&quot; Drive 1 and Drive 2 can't contain the same disk.
+          </div>
         )}
       </>
     );
