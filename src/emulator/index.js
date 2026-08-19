@@ -12,6 +12,7 @@ import {
   computeShortNames,
   md5,
   LOG,
+  SaveWhiteImage,
 } from '@webrcade/app-common';
 
 import { Prefs } from './prefs';
@@ -392,9 +393,6 @@ export class Emulator extends RetroAppWrapper {
 
   setFlop1Index(index, eject = false) {
     this.flop1Index = index;
-    if (index === 0 && this.flop1List.length > 0) {
-      this.setStateFilePath(this.flop1List[0].statePath);
-    }
     // OPT12 handles ALL drives (flop1, flop2, flop3, flop4)
     if (eject) window.Module._wrc_set_options(this.OPT12);
   }
@@ -407,9 +405,6 @@ export class Emulator extends RetroAppWrapper {
 
   setFlop3Index(index, eject = false) {
     this.flop3Index = index;
-    if (index === 0 && this.flop1List.length === 0 && this.flop3List.length > 0) {
-      this.setStateFilePath(this.flop3List[0].statePath);
-    }
     // OPT12 handles ALL drives
     if (eject) window.Module._wrc_set_options(this.OPT12);
   }
@@ -441,49 +436,64 @@ export class Emulator extends RetroAppWrapper {
     const enable2nd525 = this.getProps().enable2nd525 || false;
     const enable2nd35 = this.getProps().enable2nd35 || false;
 
-    // Restore flop1
+    // Restore flop1 -- eject if it was empty ("none") when saved, rather
+    // than leaving whatever's currently mounted in place.
     if (flop1StateName) {
+      let found = false;
       for (let i = 0; i < this.flop1List.length; i++) {
         if (this.flop1List[i].stateName === flop1StateName) {
           this.setFlop1Index(i, true);
+          found = true;
           break;
         }
       }
+      if (!found) this.setFlop1Index(-1, true);
+    } else {
+      this.setFlop1Index(-1, true);
     }
 
-    // Restore flop2 only if 2nd drive is enabled
+    // Restore flop2 -- eject if disabled, not found, or empty when saved.
     if (enable2nd525 && flop2StateName) {
+      let found = false;
       for (let i = 0; i < this.flop1List.length; i++) {
         if (this.flop1List[i].stateName === flop2StateName) {
           this.setFlop2Index(i, true);
+          found = true;
           break;
         }
       }
-    } else if (!enable2nd525) {
-      // Force eject if property is disabled
+      if (!found) this.setFlop2Index(-1, true);
+    } else {
       this.setFlop2Index(-1, true);
     }
 
-    // Restore flop3
+    // Restore flop3 -- eject if it was empty ("none") when saved.
     if (flop3StateName) {
+      let found = false;
       for (let i = 0; i < this.flop3List.length; i++) {
         if (this.flop3List[i].stateName === flop3StateName) {
           this.setFlop3Index(i, true);
+          found = true;
           break;
         }
       }
+      if (!found) this.setFlop3Index(-1, true);
+    } else {
+      this.setFlop3Index(-1, true);
     }
 
-    // Restore flop4 only if 2nd drive is enabled
+    // Restore flop4 -- eject if disabled, not found, or empty when saved.
     if (enable2nd35 && flop4StateName) {
+      let found = false;
       for (let i = 0; i < this.flop3List.length; i++) {
         if (this.flop3List[i].stateName === flop4StateName) {
           this.setFlop4Index(i, true);
+          found = true;
           break;
         }
       }
-    } else if (!enable2nd35) {
-      // Force eject if property is disabled
+      if (!found) this.setFlop4Index(-1, true);
+    } else {
       this.setFlop4Index(-1, true);
     }
 
@@ -784,6 +794,22 @@ export class Emulator extends RetroAppWrapper {
     if (this.flop1List.length > 0) this.setFlop1Index(0);
     else if (this.flop3List.length > 0) this.setFlop3Index(0);
 
+    // RA names its own save-state file after whichever disk is in the
+    // highest-numbered actively-mounted drive -- flop4 beats flop3 beats
+    // flop2 beats flop1 (confirmed via live testing). Decided once, here,
+    // rather than inside setFlopNIndex -- those get called from several
+    // other places (disk swap, state restore) that have no business
+    // re-deciding which drive RA considers primary.
+    if (enable2nd35 && this.flop3List.length > 1) {
+      this.setStateFilePath(this.flop3List[1].statePath);
+    } else if (this.flop3List.length > 0) {
+      this.setStateFilePath(this.flop3List[0].statePath);
+    } else if (enable2nd525 && this.flop1List.length > 1) {
+      this.setStateFilePath(this.flop1List[1].statePath);
+    } else if (this.flop1List.length > 0) {
+      this.setStateFilePath(this.flop1List[0].statePath);
+    }
+
     this._computeShortNames(this.flop1List);
     this._computeShortNames(this.flop3List);
   }
@@ -838,7 +864,29 @@ export class Emulator extends RetroAppWrapper {
     const { FS, Module } = window;
     const files = [];
     try {
-      if (this.flop1List.length > 0 || this.flop3List.length > 0) {
+      const hasMedia = this.flop1List.length > 0 || this.flop3List.length > 0;
+      // 5.25"-only sessions are fast enough (small disks, no extra 3.5"
+      // eject/swap loop) that this never looked like a freeze in testing --
+      // only show the message when 3.5" media is actually involved, which
+      // is meaningfully slower (larger disks + the flop3/flop4 loops below).
+      const showAnalyzingMessage = this.flop3List.length > 0;
+
+      // Ejecting/swapping through every disk plus hashing each one can take
+      // long enough to look like a freeze with no feedback -- show a status
+      // message for this phase, same mechanism already used for cloud
+      // save/load progress.
+      if (showAnalyzingMessage && this.saveMessageCallback) {
+        // Spinner suppressed -- it's jumpy rather than smooth since each
+        // disk op is a single synchronous native call with no way to paint
+        // mid-operation; the text alone is the useful signal. A single
+        // yield isn't reliably enough for the browser to actually paint
+        // before work resumes -- two is.
+        this.saveMessageCallback('Analyzing media...', false, SaveWhiteImage);
+        await new Promise(r => setTimeout(r, 0));
+        await new Promise(r => setTimeout(r, 0));
+      }
+
+      if (hasMedia) {
         // Save current state
         const savedFlop1 = this.flop1Index;
         const savedFlop2 = this.flop2Index;
@@ -849,20 +897,24 @@ export class Emulator extends RetroAppWrapper {
         for (let i = 0; i < this.flop1List.length; i++) {
           this.flop1Index = i;
           Module._wrc_set_options(this.OPT12);
+          await new Promise(r => setTimeout(r, 0));
         }
         for (let i = 0; i < this.flop1List.length; i++) {
           this.flop2Index = i;
           Module._wrc_set_options(this.OPT12);
+          await new Promise(r => setTimeout(r, 0));
         }
 
         // Eject/swap through all 3.5" disks
         for (let i = 0; i < this.flop3List.length; i++) {
           this.flop3Index = i;
           Module._wrc_set_options(this.OPT12);
+          await new Promise(r => setTimeout(r, 0));
         }
         for (let i = 0; i < this.flop3List.length; i++) {
           this.flop4Index = i;
           Module._wrc_set_options(this.OPT12);
+          await new Promise(r => setTimeout(r, 0));
         }
 
         // Restore original state
@@ -871,6 +923,7 @@ export class Emulator extends RetroAppWrapper {
         this.flop3Index = savedFlop3;
         this.flop4Index = savedFlop4;
         Module._wrc_set_options(this.OPT12);
+        await new Promise(r => setTimeout(r, 0));
       }
 
       const allMedia = [
@@ -899,6 +952,10 @@ export class Emulator extends RetroAppWrapper {
           files,
           this.saveMessageCallback,
         );
+      } else if (showAnalyzingMessage && this.saveMessageCallback) {
+        // save() clears the status message itself when it runs; nothing
+        // changed here, so clear the "Analyzing media..." message directly.
+        this.saveMessageCallback(null);
       }
     } catch (e) { LOG.error('Error persisting save state: ' + e); }
   }
