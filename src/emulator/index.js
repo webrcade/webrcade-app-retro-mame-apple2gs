@@ -227,22 +227,6 @@ export class Emulator extends RetroAppWrapper {
   }
   isEscapeHackEnabled() { return false; }
 
-  handleEscape(controllers) {
-    if (controllers.isControlDown(0, CIDS.LTRIG) && controllers.isControlDown(0, CIDS.RANALOG)) {
-      if (!this.gamepadVkPending) {
-        this.gamepadVkPending = true;
-        controllers
-          .waitUntilControlReleased(0, CIDS.ESCAPE)
-            .then(() => {
-              this.gamepadVkPending = false;
-              this.toggleKeyboard();
-            });
-      }
-      return true;
-    }
-    return false;
-  }
-
   isKeyboardEvent() { return this.keyboardEvent; }
   // Called by C++ to get ZipGS accelerator setting (0=default 2.8MHz, 1-4=7/8/12/16MHz)
   getCpuSpeed() { return this.getProps().cpuSpeed || 0; }
@@ -323,8 +307,22 @@ export class Emulator extends RetroAppWrapper {
     this.mouseX = 0;
     this.mouseY = 0;
     super.pollControls();
+    // WRC - LTRIG+RANALOG opens the virtual keyboard, via the shared
+    // CIDS.WRC_CUSTOM synthetic control (see its own comment in
+    // @webrcade/app-common/src/input/controls.js) rather than the old
+    // handleEscape()/CIDS.ESCAPE interception (removed) - that combo
+    // stopped synthesizing CIDS.ESCAPE, so this app now uses the control
+    // reserved to replace it instead.
     if (!this.paused) {
-      if (controllers.isControlDown(0, CIDS.SELECT)) {
+      if (controllers.isControlDown(0, CIDS.WRC_CUSTOM)) {
+        if (!this.gamepadVkPending) {
+          this.gamepadVkPending = true;
+          controllers.waitUntilControlReleased(0, CIDS.WRC_CUSTOM).then(() => {
+            this.gamepadVkPending = false;
+            this.toggleKeyboard();
+          });
+        }
+      } else if (controllers.isControlDown(0, CIDS.SELECT)) {
         if (this.selectDown) return;
         this.selectDown = true;
         controllers.waitUntilControlReleased(0, CIDS.SELECT).then(() => {
