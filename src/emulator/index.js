@@ -995,6 +995,7 @@ export class Emulator extends RetroAppWrapper {
     if (this.firstFrame) {
       this.firstFrame = false;
       this.setKeyboardJoystickMode(this.isKeyboardJoystickMode());
+      this.updateVkTransparency();
       setTimeout(() => {
         const onTouch = () => { this.onTouchEvent() };
         window.addEventListener("touchstart", onTouch);
