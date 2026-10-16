@@ -12,6 +12,7 @@ import {
   computeShortNames,
   md5,
   LOG,
+  SaveWhiteImage,
 } from '@webrcade/app-common';
 
 import { Prefs } from './prefs';
@@ -226,22 +227,6 @@ export class Emulator extends RetroAppWrapper {
   }
   isEscapeHackEnabled() { return false; }
 
-  handleEscape(controllers) {
-    if (controllers.isControlDown(0, CIDS.LTRIG) && controllers.isControlDown(0, CIDS.RANALOG)) {
-      if (!this.gamepadVkPending) {
-        this.gamepadVkPending = true;
-        controllers
-          .waitUntilControlReleased(0, CIDS.ESCAPE)
-            .then(() => {
-              this.gamepadVkPending = false;
-              this.toggleKeyboard();
-            });
-      }
-      return true;
-    }
-    return false;
-  }
-
   isKeyboardEvent() { return this.keyboardEvent; }
   // Called by C++ to get ZipGS accelerator setting (0=default 2.8MHz, 1-4=7/8/12/16MHz)
   getCpuSpeed() { return this.getProps().cpuSpeed || 0; }
@@ -322,8 +307,22 @@ export class Emulator extends RetroAppWrapper {
     this.mouseX = 0;
     this.mouseY = 0;
     super.pollControls();
+    // WRC - LTRIG+RANALOG opens the virtual keyboard, via the shared
+    // CIDS.WRC_CUSTOM synthetic control (see its own comment in
+    // @webrcade/app-common/src/input/controls.js) rather than the old
+    // handleEscape()/CIDS.ESCAPE interception (removed) - that combo
+    // stopped synthesizing CIDS.ESCAPE, so this app now uses the control
+    // reserved to replace it instead.
     if (!this.paused) {
-      if (controllers.isControlDown(0, CIDS.SELECT)) {
+      if (controllers.isControlDown(0, CIDS.WRC_CUSTOM)) {
+        if (!this.gamepadVkPending) {
+          this.gamepadVkPending = true;
+          controllers.waitUntilControlReleased(0, CIDS.WRC_CUSTOM).then(() => {
+            this.gamepadVkPending = false;
+            this.toggleKeyboard();
+          });
+        }
+      } else if (controllers.isControlDown(0, CIDS.SELECT)) {
         if (this.selectDown) return;
         this.selectDown = true;
         controllers.waitUntilControlReleased(0, CIDS.SELECT).then(() => {
@@ -343,7 +342,11 @@ export class Emulator extends RetroAppWrapper {
     super.onPause(p);
   }
 
-  async applyGameSettings() {}
+  async applyGameSettings() {
+    if (this.getProps().initialKeyboardMode === 1) {
+      this.keyboardJoystickMode = false;
+    }
+  }
   createAudioProcessor() {
     return new ScriptAudioProcessor(
       2,
@@ -388,9 +391,6 @@ export class Emulator extends RetroAppWrapper {
 
   setFlop1Index(index, eject = false) {
     this.flop1Index = index;
-    if (index === 0 && this.flop1List.length > 0) {
-      this.setStateFilePath(this.flop1List[0].statePath);
-    }
     // OPT12 handles ALL drives (flop1, flop2, flop3, flop4)
     if (eject) window.Module._wrc_set_options(this.OPT12);
   }
@@ -403,9 +403,6 @@ export class Emulator extends RetroAppWrapper {
 
   setFlop3Index(index, eject = false) {
     this.flop3Index = index;
-    if (index === 0 && this.flop1List.length === 0 && this.flop3List.length > 0) {
-      this.setStateFilePath(this.flop3List[0].statePath);
-    }
     // OPT12 handles ALL drives
     if (eject) window.Module._wrc_set_options(this.OPT12);
   }
@@ -437,49 +434,64 @@ export class Emulator extends RetroAppWrapper {
     const enable2nd525 = this.getProps().enable2nd525 || false;
     const enable2nd35 = this.getProps().enable2nd35 || false;
 
-    // Restore flop1
+    // Restore flop1 -- eject if it was empty ("none") when saved, rather
+    // than leaving whatever's currently mounted in place.
     if (flop1StateName) {
+      let found = false;
       for (let i = 0; i < this.flop1List.length; i++) {
         if (this.flop1List[i].stateName === flop1StateName) {
           this.setFlop1Index(i, true);
+          found = true;
           break;
         }
       }
+      if (!found) this.setFlop1Index(-1, true);
+    } else {
+      this.setFlop1Index(-1, true);
     }
 
-    // Restore flop2 only if 2nd drive is enabled
+    // Restore flop2 -- eject if disabled, not found, or empty when saved.
     if (enable2nd525 && flop2StateName) {
+      let found = false;
       for (let i = 0; i < this.flop1List.length; i++) {
         if (this.flop1List[i].stateName === flop2StateName) {
           this.setFlop2Index(i, true);
+          found = true;
           break;
         }
       }
-    } else if (!enable2nd525) {
-      // Force eject if property is disabled
+      if (!found) this.setFlop2Index(-1, true);
+    } else {
       this.setFlop2Index(-1, true);
     }
 
-    // Restore flop3
+    // Restore flop3 -- eject if it was empty ("none") when saved.
     if (flop3StateName) {
+      let found = false;
       for (let i = 0; i < this.flop3List.length; i++) {
         if (this.flop3List[i].stateName === flop3StateName) {
           this.setFlop3Index(i, true);
+          found = true;
           break;
         }
       }
+      if (!found) this.setFlop3Index(-1, true);
+    } else {
+      this.setFlop3Index(-1, true);
     }
 
-    // Restore flop4 only if 2nd drive is enabled
+    // Restore flop4 -- eject if disabled, not found, or empty when saved.
     if (enable2nd35 && flop4StateName) {
+      let found = false;
       for (let i = 0; i < this.flop3List.length; i++) {
         if (this.flop3List[i].stateName === flop4StateName) {
           this.setFlop4Index(i, true);
+          found = true;
           break;
         }
       }
-    } else if (!enable2nd35) {
-      // Force eject if property is disabled
+      if (!found) this.setFlop4Index(-1, true);
+    } else {
       this.setFlop4Index(-1, true);
     }
 
@@ -504,6 +516,17 @@ export class Emulator extends RetroAppWrapper {
         "lt":    this.INP_LTRIG,
         "rt":    this.INP_RTRIG,
         "start": this.INP_START,
+        "up":    this.INP_UP,
+        "down":  this.INP_DOWN,
+        "left":  this.INP_LEFT,
+        "right": this.INP_RIGHT,
+      };
+
+      this.moveBits = {
+        "moveup":    this.INP_UP,
+        "movedown":  this.INP_DOWN,
+        "moveleft":  this.INP_LEFT,
+        "moveright": this.INP_RIGHT,
       };
 
       this.buttonIsDown = {};
@@ -539,7 +562,13 @@ export class Emulator extends RetroAppWrapper {
         this.keyActions['' + c] = { code: 'Digit' + c };
       }
 
-      this.mappings = this.getMappings();
+      this.mappings = { ...this.getMappings() };
+      const DPAD_DEFAULTS = { up: 'moveup', down: 'movedown', left: 'moveleft', right: 'moveright' };
+      for (const [btn, defaultAction] of Object.entries(DPAD_DEFAULTS)) {
+        if (this.mappings[btn] === undefined) {
+          this.mappings[btn] = defaultAction;
+        }
+      }
     }
   }
 
@@ -557,23 +586,29 @@ export class Emulator extends RetroAppWrapper {
     this.initMaps();
     let maskedInput = input;
 
-    maskedInput &= ~(this.INP_A | this.INP_B);
+    maskedInput &= ~(this.INP_A | this.INP_B | this.INP_UP | this.INP_DOWN | this.INP_LEFT | this.INP_RIGHT);
 
     for (const [btn, action] of Object.entries(this.mappings)) {
       const bit = this.buttonBits[btn];
+      const isDown = !!(input & bit);
 
-      if (action === 'button0') {
-        if (bit && (input & bit)) maskedInput |= this.INP_A;
+      if (isDown && (action === 'button0')) {
+        maskedInput |= this.INP_A;
         continue;
       }
-      if (action === 'button1') {
-        if (bit && (input & bit)) maskedInput |= this.INP_B;
+      if (isDown && (action === 'button1')) {
+        maskedInput |= this.INP_B;
+        continue;
+      }
+
+      const moveBit = this.moveBits[action];
+      if (moveBit) {
+        if (isDown) maskedInput |= moveBit;
         continue;
       }
 
       const keyDef = this.keyActions[action];
       if (bit && keyDef) {
-        const isDown = !!(maskedInput & bit);
         const wasDown = this.buttonIsDown[btn][controller];
         if (isDown && !wasDown) {
           if (keyDef.shift) this.sendKeyDown('ShiftLeft');
@@ -757,6 +792,22 @@ export class Emulator extends RetroAppWrapper {
     if (this.flop1List.length > 0) this.setFlop1Index(0);
     else if (this.flop3List.length > 0) this.setFlop3Index(0);
 
+    // RA names its own save-state file after whichever disk is in the
+    // highest-numbered actively-mounted drive -- flop4 beats flop3 beats
+    // flop2 beats flop1 (confirmed via live testing). Decided once, here,
+    // rather than inside setFlopNIndex -- those get called from several
+    // other places (disk swap, state restore) that have no business
+    // re-deciding which drive RA considers primary.
+    if (enable2nd35 && this.flop3List.length > 1) {
+      this.setStateFilePath(this.flop3List[1].statePath);
+    } else if (this.flop3List.length > 0) {
+      this.setStateFilePath(this.flop3List[0].statePath);
+    } else if (enable2nd525 && this.flop1List.length > 1) {
+      this.setStateFilePath(this.flop1List[1].statePath);
+    } else if (this.flop1List.length > 0) {
+      this.setStateFilePath(this.flop1List[0].statePath);
+    }
+
     this._computeShortNames(this.flop1List);
     this._computeShortNames(this.flop3List);
   }
@@ -811,7 +862,29 @@ export class Emulator extends RetroAppWrapper {
     const { FS, Module } = window;
     const files = [];
     try {
-      if (this.flop1List.length > 0 || this.flop3List.length > 0) {
+      const hasMedia = this.flop1List.length > 0 || this.flop3List.length > 0;
+      // 5.25"-only sessions are fast enough (small disks, no extra 3.5"
+      // eject/swap loop) that this never looked like a freeze in testing --
+      // only show the message when 3.5" media is actually involved, which
+      // is meaningfully slower (larger disks + the flop3/flop4 loops below).
+      const showAnalyzingMessage = this.flop3List.length > 0;
+
+      // Ejecting/swapping through every disk plus hashing each one can take
+      // long enough to look like a freeze with no feedback -- show a status
+      // message for this phase, same mechanism already used for cloud
+      // save/load progress.
+      if (showAnalyzingMessage && this.saveMessageCallback) {
+        // Spinner suppressed -- it's jumpy rather than smooth since each
+        // disk op is a single synchronous native call with no way to paint
+        // mid-operation; the text alone is the useful signal. A single
+        // yield isn't reliably enough for the browser to actually paint
+        // before work resumes -- two is.
+        this.saveMessageCallback('Analyzing media...', false, SaveWhiteImage);
+        await new Promise(r => setTimeout(r, 0));
+        await new Promise(r => setTimeout(r, 0));
+      }
+
+      if (hasMedia) {
         // Save current state
         const savedFlop1 = this.flop1Index;
         const savedFlop2 = this.flop2Index;
@@ -822,20 +895,24 @@ export class Emulator extends RetroAppWrapper {
         for (let i = 0; i < this.flop1List.length; i++) {
           this.flop1Index = i;
           Module._wrc_set_options(this.OPT12);
+          await new Promise(r => setTimeout(r, 0));
         }
         for (let i = 0; i < this.flop1List.length; i++) {
           this.flop2Index = i;
           Module._wrc_set_options(this.OPT12);
+          await new Promise(r => setTimeout(r, 0));
         }
 
         // Eject/swap through all 3.5" disks
         for (let i = 0; i < this.flop3List.length; i++) {
           this.flop3Index = i;
           Module._wrc_set_options(this.OPT12);
+          await new Promise(r => setTimeout(r, 0));
         }
         for (let i = 0; i < this.flop3List.length; i++) {
           this.flop4Index = i;
           Module._wrc_set_options(this.OPT12);
+          await new Promise(r => setTimeout(r, 0));
         }
 
         // Restore original state
@@ -844,6 +921,7 @@ export class Emulator extends RetroAppWrapper {
         this.flop3Index = savedFlop3;
         this.flop4Index = savedFlop4;
         Module._wrc_set_options(this.OPT12);
+        await new Promise(r => setTimeout(r, 0));
       }
 
       const allMedia = [
@@ -872,6 +950,10 @@ export class Emulator extends RetroAppWrapper {
           files,
           this.saveMessageCallback,
         );
+      } else if (showAnalyzingMessage && this.saveMessageCallback) {
+        // save() clears the status message itself when it runs; nothing
+        // changed here, so clear the "Analyzing media..." message directly.
+        this.saveMessageCallback(null);
       }
     } catch (e) { LOG.error('Error persisting save state: ' + e); }
   }
@@ -913,6 +995,7 @@ export class Emulator extends RetroAppWrapper {
     if (this.firstFrame) {
       this.firstFrame = false;
       this.setKeyboardJoystickMode(this.isKeyboardJoystickMode());
+      this.updateVkTransparency();
       setTimeout(() => {
         const onTouch = () => { this.onTouchEvent() };
         window.addEventListener("touchstart", onTouch);
@@ -925,10 +1008,10 @@ export class Emulator extends RetroAppWrapper {
         window.addEventListener("mousemove", onMouse);
         document.onkeydown = (e) => {
           if (this.paused || this.app.isKeyboardShown()) return;
+          this.onKeyboardEvent(e);
           if (this.isKeyboardJoystickMode() &&
             this.controllers.getController(0).getKeyCodeToControllerMapping().getKeyCodeToControlId()[e.code] !== undefined)
             return;
-          this.onKeyboardEvent(e);
           if (e.repeat !== undefined && e.repeat) return;
           const retrok = this._browserCodeToRetrok(e.code);
           if (retrok) { window.Module._wrc_on_key(retrok, 1); e.stopPropagation(); e.preventDefault(); }

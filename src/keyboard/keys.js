@@ -16,9 +16,11 @@ const OpenAppleImage   = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='h
 const SHIFT_PREFIX = "SHIFT:";
 
 const onKeyboardClose = (kb, ctx) => {
-  if (ctx.caps)      ctx.caps      = false;
-  if (ctx.leftShift) ctx.leftShift = false;
-  if (ctx.control)   ctx.control   = false;
+  if (ctx.caps)        ctx.caps        = false;
+  if (ctx.leftShift)   ctx.leftShift   = false;
+  if (ctx.control)     ctx.control     = false;
+  if (ctx.openApple)   ctx.openApple   = false;
+  if (ctx.closedApple) ctx.closedApple = false;
 }
 
 let nextFlip = 0;
@@ -31,13 +33,17 @@ const allowFlip = () => {
 const showLetters  = (kb, ctx) => { if (!allowFlip()) return; ctx.currentKeys = "default"; kb.setState({ keysContext: { ...ctx } }); kb.updateFocusGridComponents(); }
 const showNumbers  = (kb, ctx) => { if (!allowFlip()) return; ctx.currentKeys = "numbers"; kb.setState({ keysContext: { ...ctx } }); kb.updateFocusGridComponents(); }
 
-const toggleCaps  = (kb, ctx, key) => { ctx.caps      = !ctx.caps;      kb.setState({ keysContext: { ...ctx } }); onKey(kb, ctx, key); }
-const toggleShift = (kb, ctx, key) => { ctx.leftShift = !ctx.leftShift; kb.setState({ keysContext: { ...ctx } }); if (ctx.leftShift) onKey(kb, ctx, key); }
-const toggleCtrl  = (kb, ctx, key) => { ctx.control   = !ctx.control;   kb.setState({ keysContext: { ...ctx } }); if (ctx.control)   onKey(kb, ctx, key); }
+const toggleCaps        = (kb, ctx, key) => { ctx.caps        = !ctx.caps;        kb.setState({ keysContext: { ...ctx } }); onKey(kb, ctx, key); }
+const toggleShift       = (kb, ctx, key) => { ctx.leftShift   = !ctx.leftShift;   kb.setState({ keysContext: { ...ctx } }); if (ctx.leftShift)   onKey(kb, ctx, key); }
+const toggleCtrl        = (kb, ctx, key) => { ctx.control     = !ctx.control;     kb.setState({ keysContext: { ...ctx } }); if (ctx.control)     onKey(kb, ctx, key); }
+const toggleOpenApple   = (kb, ctx, key) => { ctx.openApple   = !ctx.openApple;   kb.setState({ keysContext: { ...ctx } }); if (ctx.openApple)   onKey(kb, ctx, key); }
+const toggleClosedApple = (kb, ctx, key) => { ctx.closedApple = !ctx.closedApple; kb.setState({ keysContext: { ...ctx } }); if (ctx.closedApple) onKey(kb, ctx, key); }
 
-const capsEnabled  = (kb, ctx) => ctx.caps;
-const shiftEnabled = (kb, ctx) => ctx.leftShift;
-const ctrlEnabled  = (kb, ctx) => ctx.control;
+const capsEnabled        = (kb, ctx) => ctx.caps;
+const shiftEnabled       = (kb, ctx) => ctx.leftShift;
+const ctrlEnabled        = (kb, ctx) => ctx.control;
+const openAppleEnabled   = (kb, ctx) => ctx.openApple;
+const closedAppleEnabled = (kb, ctx) => ctx.closedApple;
 
 const locationToggle = (kb, ctx) => {
   const prefs = window.emulator.getPrefs();
@@ -58,15 +64,19 @@ const onKey = (kb, ctx, key) => {
 
   const applyShift = ctx.leftShift || shift;
 
-  if (applyShift)  window.emulator.sendKeyDown("ShiftLeft");
-  if (ctx.control) window.emulator.sendKeyDown("ControlLeft");
+  if (applyShift)      window.emulator.sendKeyDown("ShiftLeft");
+  if (ctx.control)     window.emulator.sendKeyDown("ControlLeft");
+  if (ctx.openApple)   window.emulator.sendKeyDown("AltLeft");
+  if (ctx.closedApple) window.emulator.sendKeyDown("AltRight");
 
   window.emulator.sendKeyDown(code);
 
   setTimeout(() => {
     window.emulator.sendKeyUp(code);
-    if (ctx.control) window.emulator.sendKeyUp("ControlLeft");
-    if (applyShift)  window.emulator.sendKeyUp("ShiftLeft");
+    if (ctx.closedApple) window.emulator.sendKeyUp("AltRight");
+    if (ctx.openApple)   window.emulator.sendKeyUp("AltLeft");
+    if (ctx.control)     window.emulator.sendKeyUp("ControlLeft");
+    if (applyShift)      window.emulator.sendKeyUp("ShiftLeft");
   }, 50);
 }
 
@@ -105,8 +115,8 @@ const KEYS = {
       new KeyDef("Esc").setWidth(2).code("Escape").setOnClick(onKey),
       new KeyDef("Tab").code("Tab").setOnClick(onKey),
       new KeyDef("Rst").code("F12").setOnClick(onKey),
-      new KeyDef("Open").setImage(OpenAppleImage).code("AltLeft").setOnClick(onKey),
-      new KeyDef("Clsd").setImage(ClosedAppleImage).code("AltRight").setOnClick(onKey),
+      new KeyDef("Open").setImage(OpenAppleImage).code("AltLeft").setOnClick(toggleOpenApple).setIsEnabledCb(openAppleEnabled),
+      new KeyDef("Clsd").setImage(ClosedAppleImage).code("AltRight").setOnClick(toggleClosedApple).setIsEnabledCb(closedAppleEnabled),
       new KeyDef("↑").setImage(ArrowUpwardImage).code("ArrowUp").setOnClick(onKey),
       new KeyDef("↓").setImage(ArrowDownwardImage).code("ArrowDown").setOnClick(onKey),
       new KeyDef("←").setImage(ArrowBackImage).code("ArrowLeft").setOnClick(onKey),
